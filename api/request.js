@@ -1,6 +1,5 @@
-// api/request.js - Netlify format
+// api/request.js - Fixed Netlify format with proper ID mapping
 exports.handler = async (event, context) => {
-  // Enable CORS
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -40,6 +39,27 @@ exports.handler = async (event, context) => {
         throw new Error('Failed to store request');
       }
 
+      const jsonBinResult = await response.json();
+      console.log('JSONBin storage result:', jsonBinResult);
+      
+      // Store the mapping of requestId -> actual JSONBin ID
+      const mappingData = {
+        requestId: requestData.id,
+        binId: jsonBinResult.metadata.id,
+        timestamp: Date.now()
+      };
+
+      // Store the mapping in a separate bin for lookup
+      await fetch('https://api.jsonbin.io/v3/b', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': process.env.JSONBIN_API_KEY,
+          'X-Bin-Name': `mapping_${requestData.id}`
+        },
+        body: JSON.stringify(mappingData)
+      });
+
       return {
         statusCode: 200,
         headers,
@@ -49,6 +69,7 @@ exports.handler = async (event, context) => {
         })
       };
     } catch (error) {
+      console.error('Error storing request:', error);
       return {
         statusCode: 500,
         headers,
@@ -73,8 +94,29 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Fetch from JSONBin
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`, {
+      // First, get the mapping to find the actual JSONBin ID
+      const mappingResponse = await fetch(`https://api.jsonbin.io/v3/b/name/mapping_${id}`, {
+        headers: {
+          'X-Master-Key': process.env.JSONBIN_API_KEY
+        }
+      });
+
+      if (!mappingResponse.ok) {
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Request not found' 
+          })
+        };
+      }
+
+      const mappingData = await mappingResponse.json();
+      const actualBinId = mappingData.record.binId;
+
+      // Now fetch the actual request data using the real bin ID
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${actualBinId}/latest`, {
         headers: {
           'X-Master-Key': process.env.JSONBIN_API_KEY
         }
@@ -114,6 +156,7 @@ exports.handler = async (event, context) => {
         })
       };
     } catch (error) {
+      console.error('Error fetching request:', error);
       return {
         statusCode: 500,
         headers,
