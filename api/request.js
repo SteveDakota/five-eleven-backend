@@ -1,25 +1,28 @@
-// api/request.js - Store and retrieve verification requests
-export default async function handler(req, res) {
+// api/request.js - Netlify format
+exports.handler = async (event, context) => {
   // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
   }
 
-  if (req.method === 'POST') {
+  if (event.httpMethod === 'POST') {
     try {
+      const body = JSON.parse(event.body);
       const requestData = {
         id: generateId(),
-        requesterName: req.body.requesterName,
-        targetName: req.body.targetName,
-        claimedHeight: req.body.claimedHeight || null,
-        claimedAge: req.body.claimedAge || null,
-        claimedLocation: req.body.claimedLocation || null,
+        requesterName: body.requesterName,
+        targetName: body.targetName,
+        claimedHeight: body.claimedHeight || null,
+        claimedAge: body.claimedAge || null,
+        claimedLocation: body.claimedLocation || null,
         timestamp: Date.now(),
-        expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+        expiresAt: Date.now() + (24 * 60 * 60 * 1000)
       };
 
       // Store in JSONBin
@@ -37,26 +40,37 @@ export default async function handler(req, res) {
         throw new Error('Failed to store request');
       }
 
-      res.status(200).json({ 
-        success: true,
-        requestId: requestData.id 
-      });
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          success: true,
+          requestId: requestData.id 
+        })
+      };
     } catch (error) {
-      console.error('Error storing request:', error);
-      res.status(500).json({ 
-        success: false,
-        error: 'Failed to create verification request' 
-      });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ 
+          success: false,
+          error: 'Failed to create verification request' 
+        })
+      };
     }
-  } else if (req.method === 'GET') {
+  } else if (event.httpMethod === 'GET') {
     try {
-      const { id } = req.query;
+      const id = event.queryStringParameters?.id;
       
       if (!id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Request ID is required' 
-        });
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Request ID is required' 
+          })
+        };
       }
 
       // Fetch from JSONBin
@@ -67,40 +81,57 @@ export default async function handler(req, res) {
       });
 
       if (!response.ok) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'Request not found' 
-        });
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Request not found' 
+          })
+        };
       }
 
       const data = await response.json();
       const requestData = data.record;
 
-      // Check if expired
       if (Date.now() > requestData.expiresAt) {
-        return res.status(410).json({ 
-          success: false,
-          error: 'Request has expired' 
-        });
+        return {
+          statusCode: 410,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Request has expired' 
+          })
+        };
       }
 
-      res.status(200).json({ 
-        success: true,
-        data: requestData 
-      });
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          success: true,
+          data: requestData 
+        })
+      };
     } catch (error) {
-      console.error('Error fetching request:', error);
-      res.status(500).json({ 
-        success: false,
-        error: 'Failed to fetch request' 
-      });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ 
+          success: false,
+          error: 'Failed to fetch request' 
+        })
+      };
     }
   } else {
-    res.status(405).json({ error: 'Method not allowed' });
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
   }
-}
+};
 
-// Utility function to generate unique IDs
 function generateId() {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }

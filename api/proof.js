@@ -1,23 +1,28 @@
-// api/proof.js - Retrieve proof results
-export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+// api/proof.js - Netlify format
+exports.handler = async (event, context) => {
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
   }
 
-  if (req.method === 'GET') {
+  if (event.httpMethod === 'GET') {
     try {
-      const { id } = req.query;
+      const id = event.queryStringParameters?.id;
       
       if (!id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Proof ID is required' 
-        });
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Proof ID is required' 
+          })
+        };
       }
 
       // Fetch proof from JSONBin
@@ -28,10 +33,14 @@ export default async function handler(req, res) {
       });
 
       if (!response.ok) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'Proof not found' 
-        });
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Proof not found' 
+          })
+        };
       }
 
       const data = await response.json();
@@ -39,32 +48,51 @@ export default async function handler(req, res) {
 
       // Check if expired
       if (Date.now() > proofData.expiresAt) {
-        return res.status(410).json({ 
-          success: false,
-          error: 'Proof has expired' 
-        });
+        return {
+          statusCode: 410,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Proof has expired' 
+          })
+        };
       }
 
-      // Validate token (simple check for development)
+      // Validate token
       if (!proofData.token) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid proof token' 
-        });
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Invalid proof token' 
+          })
+        };
       }
 
-      res.status(200).json({ 
-        success: true,
-        data: proofData 
-      });
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          success: true,
+          data: proofData 
+        })
+      };
     } catch (error) {
-      console.error('Error fetching proof:', error);
-      res.status(500).json({ 
-        success: false,
-        error: 'Failed to fetch proof' 
-      });
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ 
+          success: false,
+          error: 'Failed to fetch proof' 
+        })
+      };
     }
   } else {
-    res.status(405).json({ error: 'Method not allowed' });
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
   }
-}
+};
