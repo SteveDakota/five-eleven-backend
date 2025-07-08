@@ -24,13 +24,14 @@ exports.handler = async (event, context) => {
         expiresAt: Date.now() + (24 * 60 * 60 * 1000)
       };
 
-      // Store in JSONBin
+      // Store in JSONBin and get the bin ID immediately
       const response = await fetch('https://api.jsonbin.io/v3/b', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Master-Key': process.env.JSONBIN_API_KEY,
-          'X-Bin-Name': `request_${requestData.id}`
+          'X-Bin-Name': `request_${requestData.id}`,
+          'X-Bin-Private': 'false'  // Make bins public so we can search them
         },
         body: JSON.stringify(requestData)
       });
@@ -42,30 +43,16 @@ exports.handler = async (event, context) => {
       const jsonBinResult = await response.json();
       console.log('JSONBin storage result:', jsonBinResult);
       
-      // Store the mapping of requestId -> actual JSONBin ID
-      const mappingData = {
-        requestId: requestData.id,
-        binId: jsonBinResult.metadata.id,
-        timestamp: Date.now()
-      };
-
-      // Store the mapping in a separate bin for lookup
-      await fetch('https://api.jsonbin.io/v3/b', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': process.env.JSONBIN_API_KEY,
-          'X-Bin-Name': `mapping_${requestData.id}`
-        },
-        body: JSON.stringify(mappingData)
-      });
+      // IMPORTANT: Use the actual bin ID as our requestId
+      // This eliminates the mapping problem entirely
+      const actualRequestId = jsonBinResult.metadata.id;
 
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({ 
           success: true,
-          requestId: requestData.id 
+          requestId: actualRequestId  // Return the actual bin ID
         })
       };
     } catch (error) {
