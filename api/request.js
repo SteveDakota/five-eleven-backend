@@ -13,8 +13,9 @@ exports.handler = async (event, context) => {
   if (event.httpMethod === 'POST') {
     try {
       const body = JSON.parse(event.body);
-      const requestData = {
-        id: generateId(),
+      
+      // Create request data WITHOUT an ID first
+      const tempRequestData = {
         requesterName: body.requesterName,
         targetName: body.targetName,
         claimedHeight: body.claimedHeight || null,
@@ -30,10 +31,9 @@ exports.handler = async (event, context) => {
         headers: {
           'Content-Type': 'application/json',
           'X-Master-Key': process.env.JSONBIN_API_KEY,
-          'X-Bin-Name': `request_${requestData.id}`,
           'X-Bin-Private': 'false'  // Make bins public so we can search them
         },
-        body: JSON.stringify(requestData)
+        body: JSON.stringify(tempRequestData)
       });
 
       if (!response.ok) {
@@ -41,6 +41,24 @@ exports.handler = async (event, context) => {
       }
 
       const jsonBinResult = await response.json();
+      const actualRequestId = jsonBinResult.metadata.id;
+      
+      // Now update the stored data to include the correct ID
+      const finalRequestData = {
+        ...tempRequestData,
+        id: actualRequestId  // Use the bin ID as the data ID too
+      };
+
+      // Update the bin with the correct ID
+      await fetch(`https://api.jsonbin.io/v3/b/${actualRequestId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': process.env.JSONBIN_API_KEY
+        },
+        body: JSON.stringify(finalRequestData)
+      });
+
       console.log('JSONBin storage result:', jsonBinResult);
       
       // IMPORTANT: Use the actual bin ID as our requestId
