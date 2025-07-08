@@ -94,8 +94,42 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // First, get the mapping to find the actual JSONBin ID
-      const mappingResponse = await fetch(`https://api.jsonbin.io/v3/b/name/mapping_${id}`, {
+      // Try direct access by searching for bins with our naming pattern
+      const searchResponse = await fetch(`https://api.jsonbin.io/v3/c/bins`, {
+        headers: {
+          'X-Master-Key': process.env.JSONBIN_API_KEY
+        }
+      });
+
+      if (!searchResponse.ok) {
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Failed to search bins' 
+          })
+        };
+      }
+
+      const bins = await searchResponse.json();
+      
+      // Find the bin with name matching our request
+      const requestBin = bins.record.find(bin => bin.name === `request_${id}`);
+      
+      if (!requestBin) {
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ 
+            success: false,
+            error: 'Request not found' 
+          })
+        };
+      }
+
+      // Now fetch the actual request data using the found bin ID
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${requestBin.id}/latest`, {
         headers: {
           'X-Master-Key': process.env.JSONBIN_API_KEY
         }
@@ -112,23 +146,13 @@ exports.handler = async (event, context) => {
         };
       }
 
-      const mappingData = await mappingResponse.json();
-      const actualBinId = mappingData.record.binId;
-
-      // Now fetch the actual request data using the real bin ID
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${actualBinId}/latest`, {
-        headers: {
-          'X-Master-Key': process.env.JSONBIN_API_KEY
-        }
-      });
-
       if (!response.ok) {
         return {
           statusCode: 404,
           headers,
           body: JSON.stringify({ 
             success: false,
-            error: 'Request not found' 
+            error: 'Request data not found' 
           })
         };
       }
