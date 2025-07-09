@@ -1,4 +1,4 @@
-// api/request.js - Fixed Netlify format with proper ID mapping
+// api/request.js - Clean version without syntax errors
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -31,7 +31,7 @@ exports.handler = async (event, context) => {
         headers: {
           'Content-Type': 'application/json',
           'X-Master-Key': process.env.JSONBIN_API_KEY,
-          'X-Bin-Private': 'false'  // Make bins public so we can search them
+          'X-Bin-Private': 'false'
         },
         body: JSON.stringify(tempRequestData)
       });
@@ -41,16 +41,16 @@ exports.handler = async (event, context) => {
       }
 
       const jsonBinResult = await response.json();
-      const actualRequestId = jsonBinResult.metadata.id;
+      const binId = jsonBinResult.metadata.id;
       
       // Now update the stored data to include the correct ID
       const finalRequestData = {
         ...tempRequestData,
-        id: actualRequestId  // Use the bin ID as the data ID too
+        id: binId
       };
 
       // Update the bin with the correct ID
-      await fetch(`https://api.jsonbin.io/v3/b/${actualRequestId}`, {
+      await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -59,18 +59,12 @@ exports.handler = async (event, context) => {
         body: JSON.stringify(finalRequestData)
       });
 
-      console.log('JSONBin storage result:', jsonBinResult);
-      
-      // IMPORTANT: Use the actual bin ID as our requestId
-      // This eliminates the mapping problem entirely
-      const actualRequestId = jsonBinResult.metadata.id;
-
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({ 
           success: true,
-          requestId: actualRequestId  // Return the actual bin ID
+          requestId: binId
         })
       };
     } catch (error) {
@@ -99,57 +93,12 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Try direct access by searching for bins with our naming pattern
-      const searchResponse = await fetch(`https://api.jsonbin.io/v3/c/bins`, {
+      // Direct fetch using the requestId as the bin ID
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`, {
         headers: {
           'X-Master-Key': process.env.JSONBIN_API_KEY
         }
       });
-
-      if (!searchResponse.ok) {
-        return {
-          statusCode: 500,
-          headers,
-          body: JSON.stringify({ 
-            success: false,
-            error: 'Failed to search bins' 
-          })
-        };
-      }
-
-      const bins = await searchResponse.json();
-      
-      // Find the bin with name matching our request
-      const requestBin = bins.record.find(bin => bin.name === `request_${id}`);
-      
-      if (!requestBin) {
-        return {
-          statusCode: 404,
-          headers,
-          body: JSON.stringify({ 
-            success: false,
-            error: 'Request not found' 
-          })
-        };
-      }
-
-      // Now fetch the actual request data using the found bin ID
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${requestBin.id}/latest`, {
-        headers: {
-          'X-Master-Key': process.env.JSONBIN_API_KEY
-        }
-      });
-
-      if (!mappingResponse.ok) {
-        return {
-          statusCode: 404,
-          headers,
-          body: JSON.stringify({ 
-            success: false,
-            error: 'Request not found' 
-          })
-        };
-      }
 
       if (!response.ok) {
         return {
@@ -157,7 +106,7 @@ exports.handler = async (event, context) => {
           headers,
           body: JSON.stringify({ 
             success: false,
-            error: 'Request data not found' 
+            error: 'Request not found' 
           })
         };
       }
@@ -203,7 +152,3 @@ exports.handler = async (event, context) => {
     };
   }
 };
-
-function generateId() {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
-}
