@@ -13,6 +13,7 @@ exports.handler = async (event, context) => {
   if (event.httpMethod === 'POST') {
     try {
       const body = JSON.parse(event.body);
+      console.log('Received request body:', JSON.stringify(body, null, 2));
       
       // Create request data WITHOUT an ID first
       const tempRequestData = {
@@ -25,13 +26,14 @@ exports.handler = async (event, context) => {
         expiresAt: Date.now() + (24 * 60 * 60 * 1000)
       };
 
+      console.log('Processed request data:', JSON.stringify(tempRequestData, null, 2));
+
       // Store in JSONBin and get the bin ID immediately
       const response = await fetch('https://api.jsonbin.io/v3/b', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Master-Key': process.env.JSONBIN_API_KEY,
-          'X-Bin-Private': 'false'
+          'X-Master-Key': process.env.JSONBIN_API_KEY
         },
         body: JSON.stringify(tempRequestData)
       });
