@@ -1,4 +1,4 @@
-// api/badge.js - Matches your existing API structure
+// api/badge.js - CORRECTED version matching request.js pattern
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -31,9 +31,8 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Create badge data (same pattern as verify.js)
-      const badgeData = {
-        badgeId: generateId(),
+      // Create badge data WITHOUT badgeId first (like request.js)
+      const tempBadgeData = {
         displayName: displayName,
         extractedData: extractedData,
         selectedFields: selectedFields || [],
@@ -43,32 +42,50 @@ exports.handler = async (event, context) => {
         isValid: true
       };
 
-      const token = createSimpleToken(badgeData);
-      const finalBadgeData = { ...badgeData, token: token };
-
-      // Store in JSONBin (same pattern as verify.js)
-      const storeResponse = await fetch('https://api.jsonbin.io/v3/b', {
+      // Store in JSONBin and get the bin ID immediately
+      const response = await fetch('https://api.jsonbin.io/v3/b', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Master-Key': process.env.JSONBIN_API_KEY,
-          'X-Bin-Name': `badge_${badgeData.badgeId}`
+          'X-Master-Key': process.env.JSONBIN_API_KEY
         },
-        body: JSON.stringify(finalBadgeData)
+        body: JSON.stringify(tempBadgeData)
       });
 
-      if (!storeResponse.ok) {
+      if (!response.ok) {
         throw new Error('Failed to store badge');
       }
+
+      const jsonBinResult = await response.json();
+      const binId = jsonBinResult.metadata.id;
+      
+      // Now update the stored data to include the correct ID
+      const finalBadgeData = {
+        ...tempBadgeData,
+        badgeId: binId // Use binId as badgeId
+      };
+
+      const token = createSimpleToken(finalBadgeData);
+      const updatedBadgeData = { ...finalBadgeData, token: token };
+
+      // Update the bin with the correct ID
+      await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': process.env.JSONBIN_API_KEY
+        },
+        body: JSON.stringify(updatedBadgeData)
+      });
 
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({ 
           success: true,
-          badgeId: badgeData.badgeId,
+          badgeId: binId, // Return the actual binId
           token: token,
-          results: badgeData
+          results: finalBadgeData
         })
       };
     } catch (error) {
@@ -96,7 +113,7 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Fetch badge from JSONBin (same pattern as proof.js)
+      // Direct fetch using the badgeId as the bin ID (like request.js)
       const response = await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`, {
         headers: {
           'X-Master-Key': process.env.JSONBIN_API_KEY
@@ -117,7 +134,7 @@ exports.handler = async (event, context) => {
       const data = await response.json();
       const badgeData = data.record;
 
-      // Check if expired (same pattern as proof.js)
+      // Check if expired
       if (Date.now() > badgeData.expiresAt) {
         return {
           statusCode: 410,
@@ -156,12 +173,8 @@ exports.handler = async (event, context) => {
   }
 };
 
-// Helper functions (same as verify.js)
+// Helper function
 function createSimpleToken(data) {
   const payload = { ...data, signature: 'dev_mode_' + Date.now() };
   return Buffer.from(JSON.stringify(payload)).toString('base64');
-}
-
-function generateId() {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
