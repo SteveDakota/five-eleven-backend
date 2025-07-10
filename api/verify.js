@@ -51,9 +51,8 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Generate verification results
-      const verificationResult = {
-        proofId: generateId(),
+      // Generate verification results (without proofId first)
+      const tempVerificationResult = {
         requestId: requestId,
         heightMatch: compareValues(extractedData.height, requestData.claimedHeight, selectedFields.includes('height')),
         ageMatch: compareValues(extractedData.age, requestData.claimedAge, selectedFields.includes('age')),
@@ -68,21 +67,47 @@ exports.handler = async (event, context) => {
         displayName: displayName
       };
 
-      const token = createSimpleToken(verificationResult);
-      const proofData = { ...verificationResult, token: token };
-
+      // Store the proof data first
       const storeResponse = await fetch('https://api.jsonbin.io/v3/b', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Master-Key': process.env.JSONBIN_API_KEY,
-          'X-Bin-Name': `proof_${verificationResult.proofId}`
+          'X-Bin-Name': `proof_${Date.now()}`
         },
-        body: JSON.stringify(proofData)
+        body: JSON.stringify(tempVerificationResult)
       });
 
       if (!storeResponse.ok) {
         throw new Error('Failed to store proof');
+      }
+
+      // Get the actual JSONBin ID
+      const storeResult = await storeResponse.json();
+      const actualProofId = storeResult.metadata.id;
+
+      // Create the final verification result with the correct proofId
+      const finalVerificationResult = {
+        ...tempVerificationResult,
+        proofId: actualProofId
+      };
+
+      // Create token and update stored data with correct proofId
+      const token = createSimpleToken(finalVerificationResult);
+      const finalProofData = { ...finalVerificationResult, token: token };
+
+      // Update the stored data to include the correct proofId and token
+      const updateResponse = await fetch(`https://api.jsonbin.io/v3/b/${actualProofId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': process.env.JSONBIN_API_KEY
+        },
+        body: JSON.stringify(finalProofData)
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error('Failed to update proof with correct ID');
       }
 
       return {
@@ -90,9 +115,9 @@ exports.handler = async (event, context) => {
         headers,
         body: JSON.stringify({ 
           success: true,
-          proofId: verificationResult.proofId,
+          proofId: actualProofId,  // Return the real JSONBin ID
           token: token,
-          results: verificationResult
+          results: finalVerificationResult
         })
       };
     } catch (error) {
